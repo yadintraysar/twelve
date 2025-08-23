@@ -1,0 +1,9 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=true
+Exec=/home/nvidia/Desktop/Camera/demo_AC-IMXCam.sh IMX390
+Name=AC-IMX390_Demo
+Comment=AC-IMX390_Demo
+Icon=/home/nvidia/Desktop/Camera/demo_AC-IMX390.png

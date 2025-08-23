@@ -1,0 +1,9 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=true
+Exec=/home/nvidia/Desktop/Camera/demo_AC-IMXCam.sh ISX031
+Name=AC-ISX031_Demo
+Comment=AC-ISX031_Demo
+Icon=/home/nvidia/Desktop/Camera/demo_AC-ISX031.png

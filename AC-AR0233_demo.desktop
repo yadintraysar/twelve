@@ -1,0 +1,9 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=true
+Exec=/home/nvidia/Desktop/Camera/demo_AC-AR0233Cam.sh AR0233
+Name=AC-AR0233_Demo
+Comment=AC-AR0233_Demo
+Icon=/home/nvidia/Desktop/Camera/demo_AC-AR0233.png

@@ -1,0 +1,9 @@
+#!/usr/bin/env xdg-open
+[Desktop Entry]
+Version=1.0
+Type=Application
+Terminal=true
+Exec=sudo /home/nvidia/Desktop/Zedx/zedx.sh
+Name=ZEDX Demo
+Comment=ZEDX Demo
+Icon=/home/nvidia/Desktop/Zedx/zed_x.png

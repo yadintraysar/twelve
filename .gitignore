@@ -1,0 +1,66 @@
+# Compiled files
+*.o
+*.ko
+*.mod
+*.mod.c
+*.cmd
+*.tmp_versions/
+modules.order
+Module.symvers
+Mkfile.old
+dkms.conf
+
+# Kernel build artifacts
+*.symvers
+*.markers
+*.order
+
+# Image files
+*.img
+*.bin
+
+# Temporary files
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+*.out
+
+# IDE and editor files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Build directories
+build/
+dist/
+*.egg-info/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System files
+.directory
+desktop.ini
+
+# Backup files
+*.bak
+*.backup
+*.old
