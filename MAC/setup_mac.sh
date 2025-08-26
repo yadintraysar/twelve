@@ -57,3 +57,4 @@ echo "3. Run the display application:"
 echo "   ./launch_zed_display.sh"
 echo ""
 echo "Setup complete!"
+

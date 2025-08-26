@@ -28,6 +28,7 @@
 #include <chrono>
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
+#include <cstring>
 
 #include "display/GenericDisplay.h"
 #include "gnss_reader/IGNSSReader.h"
@@ -103,28 +104,30 @@ int main(int argc, char **argv)
     const char* port_env = std::getenv("CAM_STREAM_PORT");
     const char* enc_env  = std::getenv("CAM_STREAM_ENCODER"); // "x264" or "nv"
     std::string host = host_env ? host_env : "192.168.1.39";
-    int stream_port = port_env ? std::atoi(port_env) : 5005;
-    std::string encoder = enc_env ? enc_env : "x264";
+    int stream_port = port_env ? std::atoi(port_env) : 5001;
+    std::string encoder = enc_env ? enc_env : "nv";
 
     GstElement* pipeline = nullptr;
     GstElement* appsrc = nullptr;
     GstClockTime pts = 0;
-    const int stream_width = 1280;
-    const int stream_height = 720;
+    // Use actual camera resolution (HD1080 = 1920x1080)
+    const int stream_width = 1920;
+    const int stream_height = 1080;
     const int stream_fps = 30;
 
     auto build_pipeline = [&](const std::string& enc) -> std::string {
         std::ostringstream ss;
-        ss << "appsrc name=mysrc is-live=true format=time do-timestamp=true ! ";
-        ss << "video/x-raw,format=RGBA,width=" << stream_width << ",height=" << stream_height << ",framerate=" << stream_fps << "/1 ! ";
-        ss << "queue ! videoconvert ! ";
+        ss << "appsrc name=mysrc is-live=true format=time do-timestamp=true ";
+        ss << "caps=\"video/x-raw,format=RGBA,width=" << stream_width << ",height=" << stream_height << ",framerate=" << stream_fps << "/1\" ";
+        ss << "! queue max-size-buffers=4 leaky=downstream ";
         if (enc == "x264") {
-            // Mirror known-good sender flags
-            ss << "x264enc byte-stream=true tune=zerolatency speed-preset=ultrafast bitrate=2000 ! ";
+            ss << "! videoconvert ! x264enc byte-stream=true tune=zerolatency speed-preset=ultrafast bitrate=2000 ";
         } else {
-            ss << "nvvideoconvert ! nvv4l2h264enc insert-sps-pps=true idrinterval=30 iframeinterval=30 control-rate=1 bitrate=2000000 preset-level=1 maxperf-enable=1 ! ";
+            ss << "! nvvidconv ! video/x-raw(memory:NVMM),format=NV12 ";
+            ss << "! nvv4l2h264enc insert-sps-pps=true idrinterval=30 iframeinterval=30 bitrate=4000000 preset-level=1 maxperf-enable=1 ";
         }
-        ss << "h264parse ! rtph264pay config-interval=-1 pt=96 ! queue ! udpsink clients=" << host << ":" << stream_port << " max-bitrate=2000000 sync=false async=false";
+        ss << "! h264parse config-interval=-1 ! rtph264pay pt=96 ";
+        ss << "! udpsink host=" << host << " port=" << stream_port << " sync=false async=false";
         return ss.str();
     };
 
@@ -156,17 +159,14 @@ int main(int argc, char **argv)
 
             // Fetch left image and push to viewer as overlay
             static sl::Mat left_rgba;
-            if (left_rgba.getWidth() == 0) {
-                left_rgba.alloc(1280, 720, sl::MAT_TYPE::U8_C4, sl::MEM::CPU);
-            }
             sl::RuntimeParameters rt_params;
             zed.retrieveImage(left_rgba, sl::VIEW::LEFT, sl::MEM::CPU);
             viewer.updateCameraImage(left_rgba);
 
             // Push to GStreamer appsrc if enabled
             if (appsrc) {
-                const size_t frame_size = static_cast<size_t>(stream_width) * static_cast<size_t>(stream_height) * 4;
-                if (left_rgba.getWidth() == stream_width && left_rgba.getHeight() == stream_height) {
+                const size_t frame_size = static_cast<size_t>(left_rgba.getWidth()) * static_cast<size_t>(left_rgba.getHeight()) * 4;
+                if (left_rgba.getWidth() > 0 && left_rgba.getHeight() > 0) {
                     GstBuffer* buffer = gst_buffer_new_allocate(nullptr, frame_size, nullptr);
                     GstMapInfo map;
                     gst_buffer_map(buffer, &map, GST_MAP_WRITE);
@@ -229,6 +229,13 @@ int main(int argc, char **argv)
                 // your system by the distance you specified in positional_tracking_fusion_parameters.gnss_initialisation_distance
             }
         }
+    }
+    if (appsrc) {
+        gst_app_src_end_of_stream(GST_APP_SRC(appsrc));
+    }
+    if (pipeline) {
+        gst_element_set_state(pipeline, GST_STATE_NULL);
+        gst_object_unref(pipeline);
     }
     fusion.close();
     zed.close();
