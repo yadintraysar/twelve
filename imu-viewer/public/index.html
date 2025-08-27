@@ -335,6 +335,7 @@
     <script type="module">
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         
         class IMUViewer {
             constructor() {
@@ -345,6 +346,7 @@
                 this.axes = null;
                 this.gravityArrow = null;
                 this.ws = null;
+                this.controls = null;
                 
                 this.lastUpdate = 0;
                 this.targetFPS = 20;
@@ -353,9 +355,8 @@
                 this.showGravity = false;  // Hide gravity arrow by default
                 this.showAxes = true;
                 
-                // Store initial rotation offset to show the back
+                // Initial rotation offset (identity: no yaw/pitch/roll offset)
                 this.initialRotationOffset = new THREE.Quaternion();
-                this.initialRotationOffset.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI); // 180° around Y
                 
                 this.init();
                 this.connectWebSocket();
@@ -387,6 +388,17 @@
                 });
                 this.renderer.setSize(container.clientWidth, container.clientHeight);
                 this.renderer.setClearColor(0x2a2a2a);
+
+                // Orbit controls (user can orbit/pan/zoom the view)
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.08;
+                this.controls.rotateSpeed = 0.6;
+                this.controls.zoomSpeed = 0.8;
+                this.controls.panSpeed = 0.6;
+                this.controls.minDistance = 1.5;
+                this.controls.maxDistance = 50;
+                this.controls.target.set(0, 0, 0);
                 
                 // Load the 3D model (Pacman)
                 this.loadModel();
@@ -437,6 +449,13 @@
                         this.cube.quaternion.copy(this.initialRotationOffset);
                         
                         this.scene.add(this.cube);
+                        // Make orbit controls focus the model center
+                        if (this.controls) {
+                            const boxCenter = new THREE.Vector3();
+                            new THREE.Box3().setFromObject(this.cube).getCenter(boxCenter);
+                            this.controls.target.copy(boxCenter);
+                            this.controls.update();
+                        }
                         console.log('Model loaded with initial 90° rotation to show the back');
                         console.log('Pacman model added to scene successfully');
                     },
@@ -614,9 +633,18 @@
                         data.quaternion.z,
                         data.quaternion.w
                     );
-                    
-                    // Apply initial rotation offset, then IMU rotation
-                    this.cube.quaternion.multiplyQuaternions(this.initialRotationOffset, imuQuaternion);
+
+                    // Rotate frame about Y to correct yaw mapping: q' = Ry(+90) * q * Ry(-90)
+                    const ry90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+                    const ryNeg90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+                    const mappedQuat = new THREE.Quaternion();
+                    mappedQuat.multiplyQuaternions(ry90, imuQuaternion); // Ry90 * q
+                    mappedQuat.multiply(ryNeg90);                         // (Ry90 * q) * Ry-90
+
+                    // Reverse direction (invert quaternion) so yaw/pitch/roll move opposite
+                    const reversedQuat = mappedQuat.clone().invert();
+                    const finalQuat = reversedQuat.multiply(this.initialRotationOffset);
+                    this.cube.quaternion.copy(finalQuat);
                 } else if (this.cube && !data.quaternion) {
                     // No IMU data, just apply the initial rotation offset
                     this.cube.quaternion.copy(this.initialRotationOffset);
@@ -764,6 +792,7 @@
             
             animate() {
                 requestAnimationFrame(() => this.animate());
+                if (this.controls) this.controls.update();
                 this.renderer.render(this.scene, this.camera);
             }
         }

@@ -1,0 +1,1 @@
+~/Desktop/zed-sdk/global localization/live/cpp/build$ "/home/nvidia/Desktop/zed-sdk/global localization/live/cpp/build/ZED_Live_Global_Localization" --stream-imu | python3 "/home/nvidia/Desktop/imu-viewer/simple_server.py"
