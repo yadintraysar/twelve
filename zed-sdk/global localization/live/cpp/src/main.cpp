@@ -26,6 +26,8 @@
 #include <sl/Camera.hpp>
 #include <sl/Fusion.hpp>
 #include <chrono>
+#include <iomanip>
+#include <iostream>
 #include <gst/gst.h>
 #include <gst/app/gstappsrc.h>
 #include <cstring>
@@ -36,6 +38,14 @@
 
 int main(int argc, char **argv)
 {
+    // Parse command line arguments
+    bool stream_imu = false;
+    for (int i = 1; i < argc; i++) {
+        if (std::string(argv[i]) == "--stream-imu") {
+            stream_imu = true;
+        }
+    }
+    
     // Initialize GStreamer (for optional in-process streaming)
     gst_init(&argc, &argv);
 
@@ -82,7 +92,8 @@ int main(int argc, char **argv)
               << ", " << longitude << std::endl;
 
     // Subscribe to Odometry
-    sl::CameraIdentifier uuid(zed.getCameraInformation().serial_number);
+    auto cam_info = zed.getCameraInformation();
+    sl::CameraIdentifier uuid(cam_info.serial_number);
     fusion.subscribe(uuid);
     // Enable positional tracking for Fusion object (with GNSS)
     sl::PositionalTrackingFusionParameters positional_tracking_fusion_parameters;
@@ -93,6 +104,14 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
+
+    // Report available sensors once
+    const auto &sensor_cfg = cam_info.sensors_configuration;
+    std::cout << "Sensors available:" << std::endl;
+    std::cout << "  IMU (accel=" << sensor_cfg.accelerometer_parameters.isAvailable
+              << ", gyro=" << sensor_cfg.gyroscope_parameters.isAvailable << ")" << std::endl;
+    std::cout << "  Magnetometer=" << sensor_cfg.magnetometer_parameters.isAvailable << std::endl;
+    std::cout << "  Barometer=" << sensor_cfg.barometer_parameters.isAvailable << std::endl;
 
     // Setup viewer:
     GenericDisplay viewer;
@@ -146,6 +165,11 @@ int main(int argc, char **argv)
     }
 
     bool initial_position_set = false;
+    // Sensors state
+    sl::SensorsData sensors_data;
+    sl::Timestamp last_imu_ts = 0;
+    sl::Timestamp last_mag_ts = 0;
+    sl::Timestamp last_baro_ts = 0;
     
     while (viewer.isAvailable())
     {
@@ -196,6 +220,52 @@ int main(int argc, char **argv)
                     initial_position_set = true;
                 }
                 // Suppress GNSS errors since we're using hardcoded coordinates
+            }
+        }
+        // Print sensors data when new samples are available
+        if (zed.getSensorsData(sensors_data, sl::TIME_REFERENCE::CURRENT) == sl::ERROR_CODE::SUCCESS)
+        {
+            if (sensors_data.imu.timestamp > last_imu_ts)
+            {
+                last_imu_ts = sensors_data.imu.timestamp;
+                const auto &imu = sensors_data.imu;
+                const auto &quat = imu.pose.getOrientation();
+                
+                if (stream_imu) {
+                    // Format for imu-viewer server (exact format expected)
+                    std::cout << "IMU:" << std::endl;
+                    std::cout << "  Orientation (Ox, Oy, Oz, Ow): [" 
+                              << std::fixed << std::setprecision(6) 
+                              << quat.x << ", " << quat.y << ", " << quat.z << ", " << quat.w << "]" << std::endl;
+                    std::cout << "  Acceleration [m/s^2]: [" 
+                              << std::fixed << std::setprecision(4)
+                              << imu.linear_acceleration.x << ", " 
+                              << imu.linear_acceleration.y << ", " 
+                              << imu.linear_acceleration.z << "]" << std::endl;
+                    std::cout << "  Angular velocity [deg/s]: [" 
+                              << std::fixed << std::setprecision(4)
+                              << imu.angular_velocity.x << ", " 
+                              << imu.angular_velocity.y << ", " 
+                              << imu.angular_velocity.z << "]" << std::endl;
+                    std::cout.flush(); // Ensure immediate output for piping
+                } else {
+                    // Original debug format
+                    std::cout << "IMU:" << std::endl;
+                    std::cout << "  Orientation: {" << quat << "}" << std::endl;
+                    std::cout << "  Acceleration: {" << imu.linear_acceleration << "} [m/s^2]" << std::endl;
+                    std::cout << "  Angular Velocity: {" << imu.angular_velocity << "} [deg/s]" << std::endl;
+
+                    if (sensor_cfg.magnetometer_parameters.isAvailable && sensors_data.magnetometer.timestamp > last_mag_ts)
+                    {
+                        last_mag_ts = sensors_data.magnetometer.timestamp;
+                        std::cout << "Magnetometer:\n  Magnetic Field: {" << sensors_data.magnetometer.magnetic_field_calibrated << "} [uT]" << std::endl;
+                    }
+                    if (sensor_cfg.barometer_parameters.isAvailable && sensors_data.barometer.timestamp > last_baro_ts)
+                    {
+                        last_baro_ts = sensors_data.barometer.timestamp;
+                        std::cout << "Barometer:\n  Atmospheric pressure: " << sensors_data.barometer.pressure << " [hPa]" << std::endl;
+                    }
+                }
             }
         }
         

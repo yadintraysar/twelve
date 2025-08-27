@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Heavy-Duty IMU Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a1a;
+            color: #ffffff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .main-view {
+            flex: 1;
+            background: #2a2a2a;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-y: auto;
+            display: none;
+        }
+
+        .sidebar.visible {
+            display: block;
+        }
+
+        .state-pill {
+            display: inline-block;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .state-still { 
+            background: #28a745; 
+            color: white; 
+        }
+        .state-tilting { 
+            background: #ffc107; 
+            color: black; 
+        }
+        .state-aggressive { 
+            background: #dc3545; 
+            color: white; 
+        }
+        .state-no-signal { 
+            background: #6c757d; 
+            color: white; 
+        }
+
+        .readouts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .readout {
+            background: #3a3a3a;
+            padding: 15px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .readout-label {
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        .readout-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+        }
+
+        .controls {
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #0056b3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .corner-icons {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
+
+        .icon-btn {
+            width: 40px;
+            height: 40px;
+            background: rgba(128, 128, 128, 0.3);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+            color: #ccc;
+            font-size: 16px;
+        }
+
+        .icon-btn:hover {
+            background: rgba(128, 128, 128, 0.5);
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .advanced-panel {
+            background: #3a3a3a;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+
+        .advanced-panel.collapsed {
+            display: none;
+        }
+
+        .setting-group {
+            margin-bottom: 15px;
+        }
+
+        .setting-label {
+            display: block;
+            font-size: 12px;
+            color: #aaa;
+            margin-bottom: 5px;
+        }
+
+        .setting-input {
+            width: 100%;
+            padding: 5px;
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-radius: 3px;
+            color: white;
+            font-size: 12px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-group input {
+            margin-right: 8px;
+        }
+
+        .no-signal-banner {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #dc3545;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            z-index: 100;
+            display: none;
+        }
+
+        .calibrating-banner {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ffc107;
+            color: black;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: bold;
+            z-index: 100;
+            display: none;
+        }
+
+        #canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        .info-text {
+            font-size: 11px;
+            color: #666;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="main-view">
+            <canvas id="canvas"></canvas>
+            <div id="noSignalBanner" class="no-signal-banner">No Signal</div>
+            <!-- <div id="calibratingBanner" class="calibrating-banner">Calibrating...</div> -->
+            
+            <div class="corner-icons">
+                <button id="dataToggleBtn" class="icon-btn" title="Toggle Data Panel">☰</button>
+                <button id="settingsToggleBtn" class="icon-btn" title="Settings">⚙</button>
+            </div>
+        </div>
+        
+        <div id="sidebar" class="sidebar">
+            <!-- <div id="statePill" class="state-pill state-still">Still</div> -->
+            
+            <div class="readouts">
+                <div class="readout">
+                    <div class="readout-label">Roll</div>
+                    <div id="rollValue" class="readout-value">0.0°</div>
+                </div>
+                <div class="readout">
+                    <div class="readout-label">Pitch</div>
+                    <div id="pitchValue" class="readout-value">0.0°</div>
+                </div>
+                <div class="readout">
+                    <div class="readout-label">Yaw</div>
+                    <div id="yawValue" class="readout-value">0.0°</div>
+                </div>
+                <div class="readout">
+                    <div class="readout-label">Gyro RMS</div>
+                    <div id="gyroRmsValue" class="readout-value">0.0°/s</div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="recalibrateBtn" class="btn hidden">Re-zero</button>
+            </div>
+            
+            <div id="advancedPanel" class="advanced-panel collapsed">
+                <div class="setting-group">
+                    <label class="setting-label">Tilt Thresholds (°)</label>
+                    <input id="tiltThreshold" class="setting-input" type="number" value="8" step="0.5">
+                    <input id="aggressiveThreshold" class="setting-input" type="number" value="15" step="0.5" style="margin-top: 5px;">
+                </div>
+                
+                <div class="setting-group">
+                    <label class="setting-label">Rate Thresholds (°/s)</label>
+                    <input id="rateThreshold" class="setting-input" type="number" value="12" step="1">
+                    <input id="aggressiveRateThreshold" class="setting-input" type="number" value="20" step="1" style="margin-top: 5px;">
+                </div>
+                
+                <div class="setting-group">
+                    <label class="setting-label">Smoothing τ (s)</label>
+                    <input id="smoothingTau" class="setting-input" type="number" value="0.9" step="0.1" min="0.1" max="2.0">
+                </div>
+                
+                <div class="checkbox-group">
+                    <input id="showGravity" type="checkbox" checked>
+                    <label for="showGravity">Show gravity arrow</label>
+                </div>
+                
+                <div class="checkbox-group">
+                    <input id="showAxes" type="checkbox" checked>
+                    <label for="showAxes">Show axes labels</label>
+                </div>
+            </div>
+            
+            <div class="info-text">
+                Heavy-duty IMU viewer for construction equipment. 
+                Designed to ignore vibration and only show real tilt.
+                <br><br>
+                State thresholds are set high to avoid false triggers from equipment shake.
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        
+        class IMUViewer {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.cube = null;
+                this.axes = null;
+                this.gravityArrow = null;
+                this.ws = null;
+                
+                this.lastUpdate = 0;
+                this.targetFPS = 20;
+                this.frameInterval = 1000 / this.targetFPS;
+                
+                this.showGravity = false;  // Hide gravity arrow by default
+                this.showAxes = true;
+                
+                // Store initial rotation offset to show the back
+                this.initialRotationOffset = new THREE.Quaternion();
+                this.initialRotationOffset.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI); // 180° around Y
+                
+                this.init();
+                this.connectWebSocket();
+                this.setupEventListeners();
+            }
+            
+            init() {
+                const canvas = document.getElementById('canvas');
+                const container = canvas.parentElement;
+                
+                // Scene setup
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x2a2a2a);
+                
+                // Camera setup
+                this.camera = new THREE.PerspectiveCamera(
+                    75, 
+                    container.clientWidth / container.clientHeight, 
+                    0.1, 
+                    1000
+                );
+                this.camera.position.set(3, 3, 3);
+                this.camera.lookAt(0, 0, 0);
+                
+                // Renderer setup
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas, 
+                    antialias: true 
+                });
+                this.renderer.setSize(container.clientWidth, container.clientHeight);
+                this.renderer.setClearColor(0x2a2a2a);
+                
+                // Load the 3D model (Pacman)
+                this.loadModel();
+                
+                // Create coordinate axes
+                this.createAxes();
+                
+                // Create gravity arrow (hidden by default)
+                this.createGravityArrow();
+                this.gravityArrow.visible = this.showGravity;
+                
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(5, 5, 5);
+                this.scene.add(directionalLight);
+                
+                // Handle window resize
+                window.addEventListener('resize', () => this.onWindowResize());
+                
+                // Start render loop
+                this.animate();
+            }
+            
+            loadModel() {
+                const loader = new GLTFLoader();
+                console.log('Attempting to load pacman.glb...');
+                
+                loader.load(
+                    'pacman.glb',
+                    (gltf) => {
+                        // Success callback
+                        console.log('GLTF loaded successfully:', gltf);
+                        this.cube = gltf.scene;
+                        
+                        // Scale and position the model appropriately
+                        this.cube.scale.set(2.5, 2.5, 2.5);  // 2.5x scale
+                        this.cube.position.set(0, 0, 0);
+                        
+                        // Ensure the model is centered
+                        const box = new THREE.Box3().setFromObject(this.cube);
+                        const center = box.getCenter(new THREE.Vector3());
+                        this.cube.position.sub(center);
+                        
+                        // Apply initial rotation offset immediately
+                        this.cube.quaternion.copy(this.initialRotationOffset);
+                        
+                        this.scene.add(this.cube);
+                        console.log('Model loaded with initial 90° rotation to show the back');
+                        console.log('Pacman model added to scene successfully');
+                    },
+                    (progress) => {
+                        // Progress callback
+                        console.log('Loading progress:', (progress.loaded / progress.total * 100) + '%');
+                    },
+                    (error) => {
+                        // Error callback - fallback to cube
+                        console.error('Error loading Pacman model:', error);
+                        console.log('Falling back to default cube');
+                        this.createFallbackCube();
+                    }
+                );
+            }
+            
+            createFallbackCube() {
+                const cubeGeometry = new THREE.BoxGeometry(2, 0.5, 1);
+                const cubeMaterial = new THREE.MeshLambertMaterial({ 
+                    color: 0x4a90e2,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                this.cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                this.scene.add(this.cube);
+                console.log('Fallback cube created');
+            }
+            
+            createAxes() {
+                this.axes = new THREE.Group();
+                
+                // Create dotted line material
+                const createDottedLineMaterial = (color) => {
+                    return new THREE.LineDashedMaterial({
+                        color: color,
+                        transparent: true,
+                        opacity: 0.3,  // More transparent
+                        dashSize: 0.1,
+                        gapSize: 0.05
+                    });
+                };
+                
+                // X axis (light grey) - dotted line
+                const xPoints = [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)];
+                const xGeometry = new THREE.BufferGeometry().setFromPoints(xPoints);
+                const xMaterial = createDottedLineMaterial(0xcccccc);
+                const xAxis = new THREE.Line(xGeometry, xMaterial);
+                xAxis.computeLineDistances(); // Required for dashed lines
+                this.axes.add(xAxis);
+                
+                // Y axis (white) - dotted line
+                const yPoints = [new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 1, 0)];
+                const yGeometry = new THREE.BufferGeometry().setFromPoints(yPoints);
+                const yMaterial = createDottedLineMaterial(0xffffff);
+                const yAxis = new THREE.Line(yGeometry, yMaterial);
+                yAxis.computeLineDistances(); // Required for dashed lines
+                this.axes.add(yAxis);
+                
+                // Z axis (medium grey) - dotted line
+                const zPoints = [new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1)];
+                const zGeometry = new THREE.BufferGeometry().setFromPoints(zPoints);
+                const zMaterial = createDottedLineMaterial(0x999999);
+                const zAxis = new THREE.Line(zGeometry, zMaterial);
+                zAxis.computeLineDistances(); // Required for dashed lines
+                this.axes.add(zAxis);
+                
+                this.scene.add(this.axes);
+            }
+            
+            createGravityArrow() {
+                this.gravityArrow = new THREE.Group();
+                
+                // Arrow shaft
+                const shaftGeometry = new THREE.CylinderGeometry(0.03, 0.03, 1.5);
+                const shaftMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xffff00,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const shaft = new THREE.Mesh(shaftGeometry, shaftMaterial);
+                shaft.position.y = -0.75;
+                this.gravityArrow.add(shaft);
+                
+                // Arrow head
+                const headGeometry = new THREE.ConeGeometry(0.1, 0.3);
+                const headMaterial = new THREE.MeshBasicMaterial({ 
+                    color: 0xffff00,
+                    transparent: true,
+                    opacity: 0.8
+                });
+                const head = new THREE.Mesh(headGeometry, headMaterial);
+                head.position.y = -1.65;
+                this.gravityArrow.add(head);
+                
+                this.scene.add(this.gravityArrow);
+            }
+            
+            connectWebSocket() {
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.hostname}:6080`;
+                
+                this.ws = new WebSocket(wsUrl);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket connected');
+                    this.hideNoSignal();
+                };
+                
+                this.ws.onmessage = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        this.handleMessage(data);
+                    } catch (e) {
+                        console.error('Error parsing WebSocket message:', e);
+                    }
+                };
+                
+                this.ws.onclose = () => {
+                    console.log('WebSocket disconnected');
+                    this.showNoSignal();
+                    // Attempt to reconnect after 2 seconds
+                    setTimeout(() => this.connectWebSocket(), 2000);
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    this.showNoSignal();
+                };
+            }
+            
+            handleMessage(data) {
+                if (data.type === 'imu_data') {
+                    this.updateVisualization(data);
+                } else if (data.type === 'signal_lost') {
+                    this.showNoSignal();
+                }
+            }
+            
+            updateVisualization(data) {
+                try {
+                    const now = Date.now();
+                    if (now - this.lastUpdate < this.frameInterval) return;
+                    this.lastUpdate = now;
+                    
+                    this.hideNoSignal();
+                    
+                    // Check if we have valid data
+                    if (!data) {
+                        console.warn('Received null or undefined data');
+                        return;
+                    }
+                
+                // Update state pill (commented out)
+                // this.updateStatePill(data.state);
+                
+                // Update readouts
+                document.getElementById('rollValue').textContent = `${data.euler.roll.toFixed(1)}°`;
+                document.getElementById('pitchValue').textContent = `${data.euler.pitch.toFixed(1)}°`;
+                document.getElementById('yawValue').textContent = `${data.euler.yaw.toFixed(1)}°`;
+                document.getElementById('gyroRmsValue').textContent = `${data.gyroRMS.toFixed(1)}°/s`;
+                
+                // Update calibration banner (commented out)
+                // if (data.isCalibrating) {
+                //     this.showCalibrating();
+                // } else {
+                //     this.hideCalibrating();
+                // }
+                
+                // Update cube orientation
+                if (this.cube && data.quaternion && data.quaternion.x !== undefined) {
+                    // Create quaternion from IMU data
+                    const imuQuaternion = new THREE.Quaternion(
+                        data.quaternion.x,
+                        data.quaternion.y,
+                        data.quaternion.z,
+                        data.quaternion.w
+                    );
+                    
+                    // Apply initial rotation offset, then IMU rotation
+                    this.cube.quaternion.multiplyQuaternions(this.initialRotationOffset, imuQuaternion);
+                } else if (this.cube && !data.quaternion) {
+                    // No IMU data, just apply the initial rotation offset
+                    this.cube.quaternion.copy(this.initialRotationOffset);
+                    console.warn('No quaternion data, using initial rotation only');
+                }
+                
+                // Update gravity arrow direction
+                if (this.showGravity && data.acceleration) {
+                    const gravity = new THREE.Vector3(
+                        data.acceleration.x,
+                        data.acceleration.y,
+                        data.acceleration.z
+                    ).normalize();
+                    
+                    // Point arrow in direction of gravity
+                    this.gravityArrow.lookAt(gravity);
+                    this.gravityArrow.rotateX(Math.PI); // Flip to point down
+                }
+                } catch (error) {
+                    console.error('Error in updateVisualization:', error);
+                }
+            }
+            
+            updateStatePill(state) {
+                const pill = document.getElementById('statePill');
+                pill.className = 'state-pill';
+                
+                switch (state) {
+                    case 'still':
+                        pill.classList.add('state-still');
+                        pill.textContent = 'Still';
+                        break;
+                    case 'tilting':
+                        pill.classList.add('state-tilting');
+                        pill.textContent = 'Tilting';
+                        break;
+                    case 'aggressive':
+                        pill.classList.add('state-aggressive');
+                        pill.textContent = 'Aggressive Tilt';
+                        break;
+                    default:
+                        pill.classList.add('state-no-signal');
+                        pill.textContent = 'No Signal';
+                }
+            }
+            
+            showNoSignal() {
+                document.getElementById('noSignalBanner').style.display = 'block';
+            }
+            
+            hideNoSignal() {
+                document.getElementById('noSignalBanner').style.display = 'none';
+            }
+            
+            showCalibrating() {
+                document.getElementById('calibratingBanner').style.display = 'block';
+            }
+            
+            hideCalibrating() {
+                document.getElementById('calibratingBanner').style.display = 'none';
+            }
+            
+            setupEventListeners() {
+                // Data panel toggle
+                document.getElementById('dataToggleBtn').addEventListener('click', () => {
+                    const sidebar = document.getElementById('sidebar');
+                    sidebar.classList.toggle('visible');
+                });
+                
+                // Settings panel toggle
+                document.getElementById('settingsToggleBtn').addEventListener('click', () => {
+                    const sidebar = document.getElementById('sidebar');
+                    const panel = document.getElementById('advancedPanel');
+                    
+                    // Show sidebar if not visible
+                    if (!sidebar.classList.contains('visible')) {
+                        sidebar.classList.add('visible');
+                    }
+                    
+                    // Toggle advanced panel
+                    panel.classList.toggle('collapsed');
+                });
+                
+                // Recalibrate button (hidden by default)
+                document.getElementById('recalibrateBtn').addEventListener('click', () => {
+                    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                        this.ws.send(JSON.stringify({ type: 'recalibrate' }));
+                    }
+                });
+                
+                // Settings change handlers
+                const settingsInputs = [
+                    'tiltThreshold', 'aggressiveThreshold', 
+                    'rateThreshold', 'aggressiveRateThreshold', 
+                    'smoothingTau'
+                ];
+                
+                settingsInputs.forEach(id => {
+                    document.getElementById(id).addEventListener('change', () => {
+                        this.updateSettings();
+                    });
+                });
+                
+                // Checkbox handlers
+                document.getElementById('showGravity').addEventListener('change', (e) => {
+                    this.showGravity = e.target.checked;
+                    this.gravityArrow.visible = this.showGravity;
+                });
+                
+                document.getElementById('showAxes').addEventListener('change', (e) => {
+                    this.showAxes = e.target.checked;
+                    this.axes.visible = this.showAxes;
+                });
+            }
+            
+            updateSettings() {
+                const settings = {
+                    smoothingTau: parseFloat(document.getElementById('smoothingTau').value),
+                    tiltThresholds: {
+                        tilting: parseFloat(document.getElementById('tiltThreshold').value),
+                        aggressive: parseFloat(document.getElementById('aggressiveThreshold').value)
+                    },
+                    rateThresholds: {
+                        tilting: parseFloat(document.getElementById('rateThreshold').value),
+                        aggressive: parseFloat(document.getElementById('aggressiveRateThreshold').value)
+                    }
+                };
+                
+                fetch('/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                }).catch(console.error);
+            }
+            
+            onWindowResize() {
+                const container = this.renderer.domElement.parentElement;
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                
+                this.camera.aspect = width / height;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(width, height);
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        // Initialize the viewer when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new IMUViewer();
+        });
+    </script>
+</body>
+</html>

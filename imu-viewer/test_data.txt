@@ -1,0 +1,41 @@
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000327, 0.001154, 0.004077, 0.999991]
+  Acceleration [m/s^2]: [-0.0764, -9.7860, 0.0303]
+  Angular velocity [deg/s]: [0.3485, 0.1712, 0.1451]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000274, 0.001163, 0.004033, 0.999991]
+  Acceleration [m/s^2]: [-0.0873, -9.8075, 0.0195]
+  Angular velocity [deg/s]: [0.1920, 0.1110, -0.0979]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000405, 0.001178, 0.004044, 0.999991]
+  Acceleration [m/s^2]: [-0.0837, -9.7896, 0.0195]
+  Angular velocity [deg/s]: [0.3164, 0.1108, 0.0233]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000350, 0.001192, 0.004170, 0.999990]
+  Acceleration [m/s^2]: [-0.1053, -9.7717, 0.0016]
+  Angular velocity [deg/s]: [-0.0851, 0.1422, -0.0346]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000323, 0.001193, 0.004195, 0.999990]
+  Acceleration [m/s^2]: [-0.0695, -9.8004, 0.0052]
+  Angular velocity [deg/s]: [-0.2383, 0.0525, 0.2113]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000414, 0.001193, 0.004230, 0.999990]
+  Acceleration [m/s^2]: [-0.0622, -9.7968, 0.0195]
+  Angular velocity [deg/s]: [-0.0559, -0.0993, -0.0343]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000386, 0.001196, 0.004106, 0.999991]
+  Acceleration [m/s^2]: [-0.0550, -9.8075, 0.0195]
+  Angular velocity [deg/s]: [-0.0558, 0.0514, -0.1569]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000341, 0.001175, 0.004118, 0.999991]
+  Acceleration [m/s^2]: [-0.0874, -9.7789, -0.0092]
+  Angular velocity [deg/s]: [0.0381, 0.1116, -0.0355]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000339, 0.001210, 0.004126, 0.999991]
+  Acceleration [m/s^2]: [-0.0946, -9.7789, -0.0056]
+  Angular velocity [deg/s]: [0.1009, 0.2020, 0.0248]
+IMU:
+  Orientation (Ox, Oy, Oz, Ow): [0.000369, 0.001227, 0.004148, 0.999991]
+  Acceleration [m/s^2]: [-0.0980, -9.8075, 0.0160]
+  Angular velocity [deg/s]: [-0.0826, 0.3838, 0.0870]
+

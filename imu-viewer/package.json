@@ -1,0 +1,17 @@
+{
+  "name": "imu-viewer",
+  "version": "1.0.0",
+  "description": "Heavy-duty 3D IMU viewer for construction equipment",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "keywords": ["imu", "3d", "visualization", "construction", "zed"],
+  "author": "",
+  "license": "MIT"
+}
+
