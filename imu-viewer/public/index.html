@@ -369,7 +369,7 @@
                 
                 // Scene setup
                 this.scene = new THREE.Scene();
-                this.scene.background = new THREE.Color(0x2a2a2a);
+                this.scene.background = new THREE.Color(0xaaaaaa); // Changed to lighter gray like script.js
                 
                 // Camera setup
                 this.camera = new THREE.PerspectiveCamera(
@@ -378,7 +378,7 @@
                     0.1, 
                     1000
                 );
-                this.camera.position.set(3, 3, 3);
+                this.camera.position.set(0.67, 0.5, 0.67); // Much closer - 3x closer to device
                 this.camera.lookAt(0, 0, 0);
                 
                 // Renderer setup
@@ -387,18 +387,23 @@
                     antialias: true 
                 });
                 this.renderer.setSize(container.clientWidth, container.clientHeight);
-                this.renderer.setClearColor(0x2a2a2a);
+                this.renderer.setClearColor(0xaaaaaa); // Match background
+                this.renderer.shadowMap.enabled = false; // Disable shadows
 
                 // Orbit controls (user can orbit/pan/zoom the view)
                 this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-                this.controls.enableDamping = true;
+                this.controls.enableDamping = false; // Disable damping to avoid floaty feel
                 this.controls.dampingFactor = 0.08;
-                this.controls.rotateSpeed = 0.6;
-                this.controls.zoomSpeed = 0.8;
+                this.controls.rotateSpeed = 0.5;
+                this.controls.zoomSpeed = 0.6;
                 this.controls.panSpeed = 0.6;
-                this.controls.minDistance = 1.5;
-                this.controls.maxDistance = 50;
+                this.controls.minDistance = 0.5; // Closer min distance for tunnel
+                this.controls.maxDistance = 10; // Reduced max distance
                 this.controls.target.set(0, 0, 0);
+                
+                // Create tunnel environment first
+                this.createGround();
+                this.createTunnel();
                 
                 // Load the 3D model (Pacman)
                 this.loadModel();
@@ -410,12 +415,13 @@
                 this.createGravityArrow();
                 this.gravityArrow.visible = this.showGravity;
                 
-                // Lighting
-                const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                // Lighting setup matching script.js
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
                 this.scene.add(ambientLight);
                 
                 const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                directionalLight.position.set(5, 5, 5);
+                directionalLight.position.set(5, 10, 7.5);
+                directionalLight.castShadow = false; // Disable shadow casting
                 this.scene.add(directionalLight);
                 
                 // Handle window resize
@@ -425,30 +431,230 @@
                 this.animate();
             }
             
+            createGround() {
+                console.log("Creating ground plane...");
+                // Create ground plane (150m x 150m)
+                const groundGeometry = new THREE.PlaneGeometry(150, 150);
+                const groundMaterial = new THREE.MeshStandardMaterial({ 
+                    color: 0x777777, // Gray concrete color from script.js
+                    side: THREE.DoubleSide
+                });
+                this.groundMesh = new THREE.Mesh(groundGeometry, groundMaterial);
+                this.groundMesh.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+                this.groundMesh.position.y = -0.01; // Slightly below origin
+                this.groundMesh.receiveShadow = false;
+                this.scene.add(this.groundMesh);
+                console.log("Ground plane created");
+            }
+            
+            createTunnel() {
+                console.log("Creating arched inner tunnel...");
+                
+                // Inner tunnel dimensions (very tight fit for 60cm device)
+                const tunnelWidth = 0.4; // 40cm - narrower than 60cm device
+                const tunnelHeight = 0.7; // 70cm - more height clearance
+                const tunnelLength = 8; // 8m long tunnel for good visual context
+                
+                // Tunnel material - sand colored, semi-transparent
+                const tunnelMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x696969, // Sand color from script.js
+                    roughness: 0.9,
+                    metalness: 0.0,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.4 // Semi-transparent so we can see device inside
+                });
+                
+                // Create arched tunnel profile (like in script.js)
+                const profilePoints = [];
+                const visualProfilePoints = 20;
+                
+                // Start with left bottom corner
+                profilePoints.push(new THREE.Vector2(-tunnelWidth / 2, 0));
+                
+                // Create arched top using semicircle
+                for (let i = 0; i <= visualProfilePoints; i++) {
+                    const angle = Math.PI * (1 - i / visualProfilePoints);
+                    profilePoints.push(new THREE.Vector2(
+                        Math.cos(angle) * (tunnelWidth / 2), 
+                        Math.sin(angle) * (tunnelWidth / 2) + (tunnelHeight - tunnelWidth / 2)
+                    ));
+                }
+                
+                // End with right bottom corner
+                profilePoints.push(new THREE.Vector2(tunnelWidth / 2, 0));
+                
+                // Create simple straight path for our tunnel
+                const pathPoints = [
+                    new THREE.Vector3(0, 0, -tunnelLength/2),
+                    new THREE.Vector3(0, 0, tunnelLength/2)
+                ];
+                
+                // Create the tunnel geometry by extruding the profile along the path
+                const visualPath = new THREE.CatmullRomCurve3(pathPoints);
+                const pathSegments = 50; // Number of segments along the path
+                const frames = visualPath.computeFrenetFrames(pathSegments, false);
+                
+                const tunnelVertices = [];
+                const tunnelFaces = [];
+                
+                const worldUp = new THREE.Vector3(0, 1, 0);
+                const rotationMatrix = new THREE.Matrix4();
+                const translationMatrix = new THREE.Matrix4();
+                const transformationMatrix = new THREE.Matrix4();
+                const localVertex = new THREE.Vector3();
+                const worldVertex = new THREE.Vector3();
+                
+                // Generate vertices by extruding profile along path
+                for (let i = 0; i <= pathSegments; i++) {
+                    const point = visualPath.getPointAt(i / pathSegments);
+                    const tangent = frames.tangents[i];
+                    
+                    // Calculate local coordinate system
+                    const axisZ = tangent.clone();
+                    const axisX = worldUp.clone().cross(axisZ).normalize();
+                    const axisY = axisZ.clone().cross(axisX).normalize();
+                    
+                    // Create transformation matrix
+                    rotationMatrix.makeBasis(axisX, axisY, axisZ);
+                    translationMatrix.makeTranslation(point.x, point.y, point.z);
+                    transformationMatrix.multiplyMatrices(translationMatrix, rotationMatrix);
+                    
+                    // Transform each profile point
+                    for (let j = 0; j < profilePoints.length; j++) {
+                        const profilePoint = profilePoints[j];
+                        localVertex.set(profilePoint.x, profilePoint.y, 0);
+                        worldVertex.copy(localVertex).applyMatrix4(transformationMatrix);
+                        tunnelVertices.push(worldVertex.x, worldVertex.y, worldVertex.z);
+                    }
+                    
+                    // Generate faces
+                    if (i > 0) {
+                        const baseIdx = (i - 1) * profilePoints.length;
+                        const currentBaseIdx = i * profilePoints.length;
+                        for (let j = 0; j < profilePoints.length - 1; j++) {
+                            const v1 = baseIdx + j;
+                            const v2 = baseIdx + j + 1;
+                            const v3 = currentBaseIdx + j + 1;
+                            const v4 = currentBaseIdx + j;
+                            tunnelFaces.push(v1, v2, v4);
+                            tunnelFaces.push(v2, v3, v4);
+                        }
+                    }
+                }
+                
+                // Create the tunnel geometry
+                const tunnelGeometry = new THREE.BufferGeometry();
+                tunnelGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tunnelVertices, 3));
+                tunnelGeometry.setIndex(tunnelFaces);
+                tunnelGeometry.computeVertexNormals();
+                
+                // Create tunnel mesh
+                const tunnelMesh = new THREE.Mesh(tunnelGeometry, tunnelMaterial);
+                tunnelMesh.castShadow = false;
+                tunnelMesh.receiveShadow = false;
+                
+                // Create a group and add tunnel
+                const tunnelGroup = new THREE.Group();
+                tunnelGroup.add(tunnelMesh);
+                
+                // Add tunnel floor (separate from walls for better ground contact)
+                const tunnelFloorGeometry = new THREE.PlaneGeometry(tunnelWidth, tunnelLength);
+                const tunnelFloorMaterial = new THREE.MeshStandardMaterial({
+                    color: 0x555555, // Slightly darker than main ground
+                    roughness: 0.8
+                });
+                const tunnelFloor = new THREE.Mesh(tunnelFloorGeometry, tunnelFloorMaterial);
+                tunnelFloor.rotation.x = -Math.PI / 2;
+                tunnelFloor.position.y = 0.001; // Slightly above main ground
+                tunnelFloor.receiveShadow = false;
+                tunnelGroup.add(tunnelFloor);
+                
+                // Rotate the entire tunnel group 90 degrees around Y axis
+                tunnelGroup.rotation.y = Math.PI / 2; // 90 degrees
+                
+                // Add the rotated tunnel group to the scene
+                this.scene.add(tunnelGroup);
+                
+                console.log(`Arched tunnel created: ${tunnelWidth}m wide x ${tunnelHeight}m high x ${tunnelLength}m long`);
+                console.log(`TIGHT FIT: Device width = 60cm, Tunnel width = ${tunnelWidth * 100}cm (device is ${((0.6 - tunnelWidth) * 100).toFixed(1)}cm WIDER than tunnel)`);
+                console.log(`Height: Device ~30cm, Tunnel ${tunnelHeight * 100}cm (${((tunnelHeight - 0.3) * 100).toFixed(1)}cm clearance above device)`);
+            }
+
             loadModel() {
                 const loader = new GLTFLoader();
                 console.log('Attempting to load pacman.glb...');
                 
                 loader.load(
-                    'pacman.glb',
+                    'pacman2.glb',
                     (gltf) => {
                         // Success callback
                         console.log('GLTF loaded successfully:', gltf);
                         this.cube = gltf.scene;
                         
-                        // Scale and position the model appropriately
-                        this.cube.scale.set(2.5, 2.5, 2.5);  // 2.5x scale
-                        this.cube.position.set(0, 0, 0);
-                        
-                        // Ensure the model is centered
+                        // Scale the model to be 60cm wide (as specified)
+                        // First get current dimensions
                         const box = new THREE.Box3().setFromObject(this.cube);
-                        const center = box.getCenter(new THREE.Vector3());
-                        this.cube.position.sub(center);
+                        const size = box.getSize(new THREE.Vector3());
+                        const currentWidth = Math.max(size.x, size.z); // Use the larger horizontal dimension
+                        
+                        // Scale to make it 0.6m (60cm) wide
+                        const targetWidth = 0.6;
+                        const scaleFactor = targetWidth / currentWidth;
+                        this.cube.scale.set(scaleFactor, scaleFactor, scaleFactor);
+                        
+                        // Position the model on the ground (tunnel floor)
+                        const scaledBox = new THREE.Box3().setFromObject(this.cube);
+                        const scaledSize = scaledBox.getSize(new THREE.Vector3());
+                        
+                        // Center horizontally, place on ground
+                        this.cube.position.set(0, scaledSize.y / 2, 0);
+                        this.cube.updateMatrixWorld(true);
+                        
+                        // Disable shadows for the model
+                        this.cube.traverse((child) => {
+                            if (child.isMesh) {
+                                child.castShadow = false;
+                                child.receiveShadow = false;
+                            }
+                        });
+                        
+                        // Compute and cache local-space contact points (front, back, left, right centers at base)
+                        // Derive local-space AABB by transforming world AABB corners back to local
+                        const worldBox = new THREE.Box3().setFromObject(this.cube);
+                        const worldMin = worldBox.min.clone();
+                        const worldMax = worldBox.max.clone();
+                        const worldCenter = worldBox.getCenter(new THREE.Vector3());
+                        
+                        // Convert world-space center/min/max to local space
+                        const localCenter = this.cube.worldToLocal(worldCenter.clone());
+                        const localMin = this.cube.worldToLocal(worldMin.clone());
+                        const localMax = this.cube.worldToLocal(worldMax.clone());
+                        const halfExtents = new THREE.Vector3(
+                            Math.abs(localMax.x - localMin.x) / 2,
+                            Math.abs(localMax.y - localMin.y) / 2,
+                            Math.abs(localMax.z - localMin.z) / 2
+                        );
+                        const baseY = Math.min(localMin.y, localMax.y); // lowest local Y at base
+                        
+                        // Shrink factors to avoid using boom/tool overhang as footprint
+                        const shrinkX = 0.75; // 75% of half-width toward center
+                        const shrinkZ = 0.60; // 60% of half-depth toward center (pull front/back under legs)
+                        const dx = halfExtents.x * shrinkX;
+                        const dz = halfExtents.z * shrinkZ;
+                        
+                        this.contactLocalPoints = [
+                            new THREE.Vector3(localCenter.x, baseY, localCenter.z + dz), // front center (shrunk)
+                            new THREE.Vector3(localCenter.x, baseY, localCenter.z - dz), // back center (shrunk)
+                            new THREE.Vector3(localCenter.x - dx, baseY, localCenter.z), // left center (shrunk)
+                            new THREE.Vector3(localCenter.x + dx, baseY, localCenter.z)  // right center (shrunk)
+                        ];
                         
                         // Apply initial rotation offset immediately
                         this.cube.quaternion.copy(this.initialRotationOffset);
                         
                         this.scene.add(this.cube);
+                        
                         // Make orbit controls focus the model center
                         if (this.controls) {
                             const boxCenter = new THREE.Vector3();
@@ -456,8 +662,10 @@
                             this.controls.target.copy(boxCenter);
                             this.controls.update();
                         }
-                        console.log('Model loaded with initial 90° rotation to show the back');
-                        console.log('Pacman model added to scene successfully');
+                        
+                        console.log(`Model loaded and scaled to ${targetWidth}m width`);
+                        console.log(`Device positioned in TIGHT tunnel environment`);
+                        console.log(`Tight fit: Device = 60cm wide, Tunnel = 40cm wide (device is 20cm WIDER than tunnel)`);
                     },
                     (progress) => {
                         // Progress callback
@@ -473,15 +681,24 @@
             }
             
             createFallbackCube() {
-                const cubeGeometry = new THREE.BoxGeometry(2, 0.5, 1);
-                const cubeMaterial = new THREE.MeshLambertMaterial({ 
+                // Create a fallback cube that's 60cm wide (to match our scaling)
+                const cubeGeometry = new THREE.BoxGeometry(0.6, 0.3, 0.4); // 60cm x 30cm x 40cm
+                const cubeMaterial = new THREE.MeshStandardMaterial({ 
                     color: 0x4a90e2,
                     transparent: true,
                     opacity: 0.8
                 });
                 this.cube = new THREE.Mesh(cubeGeometry, cubeMaterial);
+                
+                // Position on ground like the GLTF model
+                this.cube.position.set(0, 0.15, 0); // Half height (30cm/2 = 15cm) above ground
+                
+                // Disable shadows
+                this.cube.castShadow = false;
+                this.cube.receiveShadow = false;
+                
                 this.scene.add(this.cube);
-                console.log('Fallback cube created');
+                console.log('Fallback cube created (60cm wide, positioned on ground in tunnel)');
             }
             
             createAxes() {
@@ -641,10 +858,68 @@
                     mappedQuat.multiplyQuaternions(ry90, imuQuaternion); // Ry90 * q
                     mappedQuat.multiply(ryNeg90);                         // (Ry90 * q) * Ry-90
 
-                    // Reverse direction (invert quaternion) so yaw/pitch/roll move opposite
-                    const reversedQuat = mappedQuat.clone().invert();
-                    const finalQuat = reversedQuat.multiply(this.initialRotationOffset);
-                    this.cube.quaternion.copy(finalQuat);
+                    // Compose with initial offset (and invert to match desired direction)
+                    const finalQuat = mappedQuat.clone().invert().multiply(this.initialRotationOffset);
+
+                    // Reverse pitch only by negating Z in Euler (keep roll X and yaw Y unchanged)
+                    const pitchOrder = 'YXZ';
+                    const tmpEuler = new THREE.Euler().setFromQuaternion(finalQuat, pitchOrder);
+                    // revert previous change: do not negate X
+                    tmpEuler.z = -tmpEuler.z; // invert pitch mapped on Z
+                    const adjustedQuat = new THREE.Quaternion().setFromEuler(tmpEuler);
+
+                    // --- Pivot-anchored rotation ---
+                    // Determine active pivot (lowest of the four contact points). Keep stable until the winning point changes by margin.
+                    const groundY = 0.001;
+                    const epsilon = 0.0005;
+                    const hardBias = 0.002; // push slightly into ground for heavy feel
+                    const targetMinY = groundY + epsilon - hardBias;
+
+                    let pivotIndex = this.activePivotIndex ?? 0;
+                    let minY = Infinity;
+                    if (this.contactLocalPoints && this.contactLocalPoints.length === 4) {
+                        let winner = 0;
+                        for (let i = 0; i < 4; i++) {
+                            const wp = this.cube.localToWorld(this.contactLocalPoints[i].clone());
+                            if (wp.y < minY) { minY = wp.y; winner = i; }
+                        }
+                        // Hysteresis: only switch if the new winner is lower than current by a small margin
+                        if (this.activePivotIndex === undefined) {
+                            pivotIndex = winner;
+                        } else {
+                            const currentWp = this.cube.localToWorld(this.contactLocalPoints[this.activePivotIndex].clone());
+                            if (minY < currentWp.y - 0.002) pivotIndex = winner; // 2mm margin
+                        }
+                        this.activePivotIndex = pivotIndex;
+                    }
+
+                    // Compute pivot world position BEFORE rotation
+                    const pivotLocal = (this.contactLocalPoints && this.contactLocalPoints[pivotIndex])
+                        ? this.contactLocalPoints[pivotIndex].clone()
+                        : new THREE.Vector3(0, 0, 0);
+                    const pivotWorldBefore = this.cube.localToWorld(pivotLocal.clone());
+
+                    // Apply desired rotation (with reversed pitch)
+                    this.cube.quaternion.copy(adjustedQuat);
+                    this.cube.updateMatrixWorld(true);
+
+                    // Compute pivot world position AFTER rotation and reposition the body so pivot stays at same X/Z and target Y
+                    const pivotWorldAfter = this.cube.localToWorld(pivotLocal.clone());
+                    const desiredPivotWorld = new THREE.Vector3(pivotWorldBefore.x, targetMinY, pivotWorldBefore.z);
+                    const offset = new THREE.Vector3().subVectors(desiredPivotWorld, pivotWorldAfter);
+                    this.cube.position.add(offset);
+                    this.cube.updateMatrixWorld(true);
+
+                    // Final clamp to guarantee contact (using all points)
+                    if (this.contactLocalPoints && this.contactLocalPoints.length === 4) {
+                        let finalMinY = Infinity;
+                        for (let i = 0; i < 4; i++) {
+                            const wp = this.cube.localToWorld(this.contactLocalPoints[i].clone());
+                            if (wp.y < finalMinY) finalMinY = wp.y;
+                        }
+                        const delta = (groundY + epsilon) - finalMinY;
+                        if (Math.abs(delta) > 1e-6) this.cube.position.y += delta;
+                    }
                 } else if (this.cube && !data.quaternion) {
                     // No IMU data, just apply the initial rotation offset
                     this.cube.quaternion.copy(this.initialRotationOffset);
